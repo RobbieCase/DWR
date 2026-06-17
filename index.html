@@ -317,7 +317,13 @@ function DepthChart({team,players,fc,fcName,pick,sel,onBack}){
   </div>);
 }
 function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig}){
-  const sigP=sig&&sel.espn_id?sig.players[String(sel.espn_id)]:null;
+  const sigP=(()=>{
+    if(!sig||!sel) return null;
+    if(sel.espn_id && sig.players[String(sel.espn_id)]) return sig.players[String(sel.espn_id)];
+    const n=norm(sel.full_name);
+    for(const k in sig.players){ if(norm(sig.players[k].name)===n) return sig.players[k]; }
+    return null;
+  })();
   const sigMeta=sig&&sig.meta;
   if(!sel) return (
     <div className="panel pad" style={{marginTop:12,textAlign:"center",padding:"42px 16px"}}>
@@ -400,7 +406,7 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig}){
 
     {(fn==="val"||fn==="use") && sigP && (
       <div className="panel pad" style={{marginTop:12,borderColor:sigP.flag==="buy"?"var(--buy)":"var(--line2)"}}>
-        <div className="lbl" style={{marginBottom:8}}>usage signal · live · backtested</div>
+        <div className="lbl" style={{marginBottom:8}}>usage signal · {sigP.season} season · backtested</div>
         <div className="row" style={{gridTemplateColumns:"repeat(3,1fr)",marginTop:0}}>
           <div className="metric"><div className="lbl">usage z · opp</div><div className="v" style={{color:"var(--wr)"}}>{sigP.z_opp>=0?"+":""}{sigP.z_opp}</div></div>
           <div className="metric"><div className="lbl">usage gap</div><div className="v" style={{color:sigP.gap>=0?"var(--buy)":"var(--sell)"}}>{sigP.gap>=0?"+":""}{sigP.gap}</div><div className="mono small faint" style={{marginTop:3}}>opp − scoring</div></div>
@@ -413,6 +419,9 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig}){
 
     {fn==="use" && !sigP && <div className="stub" style={{marginTop:12}}>
       <b>usage · opportunity</b> — chunk 2 (python spine)<br/>
+      {sig
+        ? <span style={{color:"var(--warn)"}}>no usage signal for {sel.full_name} — {sel.years_exp===0?"rookie, no NFL season logged yet":"no recent season with 5+ games (injured / inactive / deep on the chart)"}.<br/></span>
+        : <span style={{color:"var(--faint)"}}>signal feed not loaded (check data/signal.json).<br/></span>}
       snap share, route participation, target share, air-yards / aDOT, red-zone touches from nflverse → the lead-indicator panel and the target-depth field viz.</div>}
     {fn==="trd" && <div className="stub" style={{marginTop:12}}>
       <b>trade terminal</b> — chunk 3<br/>

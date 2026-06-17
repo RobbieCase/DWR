@@ -1,25 +1,19 @@
-"""Data layer. Pulls weekly player opportunity data.
+"""Data layer. Weekly player opportunity data for all four skill positions.
 
-Two tiers:
-  * pull_weekly() — committed CSVs on raw.githubusercontent (reachable everywhere,
-    incl. sandboxed/CI). Targets, touches, red-zone targets, fantasy points.
-  * NFLVERSE_RELEASES — richer features (snap share, routes, air yards) live on
-    GitHub *release* assets. Those redirect to objects.githubusercontent, which some
-    locked-down networks block. Enable when deployed where releases are reachable.
+Committed CSVs on raw.githubusercontent (reachable everywhere incl. CI). Richer
+features (snap share / routes / air yards) live on GitHub release assets and need
+objects.githubusercontent reachable — wire those in on deploy (see NFLVERSE_RELEASES).
 """
-import io, time, requests, pandas as pd, numpy as np
+import io, requests, pandas as pd, numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
-UA = {"User-Agent": "gridiron-spine/0.1"}
+UA = {"User-Agent": "gridiron-spine/0.2"}
 BASE = "https://raw.githubusercontent.com/hvpkod/NFL-Data/main/NFL-data-Players"
-
-# Richer sources for deploy-time (snap share / air yards / routes). Blocked in some CI.
 NFLVERSE_RELEASES = {
-    "player_stats": "https://github.com/nflverse/nflverse-data/releases/download/player_stats/stats_player_week_{year}.parquet",
-    "snap_counts":  "https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_{year}.parquet",
+    "snap_counts": "https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_{year}.parquet",
 }
 
-def pull_weekly(seasons, positions=("WR", "RB", "TE"), max_week=18, workers=16):
+def pull_weekly(seasons, positions=("QB", "RB", "WR", "TE"), max_week=18, workers=16):
     sess = requests.Session(); sess.headers.update(UA)
     def grab(job):
         y, w, p = job
@@ -37,11 +31,13 @@ def pull_weekly(seasons, positions=("WR", "RB", "TE"), max_week=18, workers=16):
         parts = [d for d in ex.map(grab, jobs) if d is not None]
     df = pd.concat(parts, ignore_index=True)
     cols = ["PlayerName", "PlayerId", "Team", "season", "week", "pos",
-            "Targets", "Touches", "RzTarget", "TotalPoints"]
+            "Targets", "Touches", "RzTarget", "TouchCarries", "RushingYDS",
+            "PassingYDS", "TotalPoints"]
     df = df[cols].copy()
-    for c in ["Targets", "Touches", "RzTarget", "TotalPoints"]:
+    num = ["Targets", "Touches", "RzTarget", "TouchCarries", "RushingYDS",
+           "PassingYDS", "TotalPoints"]
+    for c in num:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-    # share of team skill-position targets that week
     team_tgt = df.groupby(["season", "week", "Team"])["Targets"].transform("sum")
     df["tgt_share"] = np.where(team_tgt > 0, df.Targets / team_tgt, 0.0)
     return df
