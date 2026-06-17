@@ -139,6 +139,8 @@ function App(){
   const [league,setLeague]=useState(null);
   const [teams,setTeams]=useState(null);
   const [lStatus,setLStatus]=useState("");
+  const [myLeague,setMyLeague]=useState(null);
+  useEffect(()=>{try{const s=localStorage.getItem("dwr_myleague");if(s)setMyLeague(JSON.parse(s));}catch(e){}},[]);
   const idx=useRef([]);
 
   useEffect(()=>{(async()=>{
@@ -197,6 +199,13 @@ function App(){
       if(fc)t.sort((a,b)=>b.val-a.val);
       setTeams(t);setLStatus("");
     }catch(e){setLStatus("could not load league rosters");}
+  }
+  function setMyTeam(rid){
+    if(!league||!teams)return;
+    const obj={leagueId:league.league_id,leagueName:league.name,myRosterId:rid,
+      teams:teams.map(t=>({rid:t.rid,name:t.name,playerIds:t.players,w:t.w,l:t.l}))};
+    try{localStorage.setItem("dwr_myleague",JSON.stringify(obj));}catch(e){}
+    setMyLeague(obj);
   }
 
   return (
@@ -268,11 +277,11 @@ function App(){
     </div>
 
     {view==="league"
-      ? <LeagueView {...{uname,setUname,season,setSeason,syncLeagues,leagues,loadLeague,league,teams,lStatus,fc,players,pick}}/>
+      ? <LeagueView {...{uname,setUname,season,setSeason,syncLeagues,leagues,loadLeague,league,teams,lStatus,fc,players,pick,setMyTeam,myLeague}}/>
       : view==="depth"
       ? <DepthChart {...{team:depthTeam,players,fc,fcName,pick,sel,onBack:()=>setView("player")}}/>
       : view==="trade"
-      ? <TradeTerminal {...{players,fc,fcName,sig,pick}}/>
+      ? <TradeTerminal {...{players,fc,fcName,sig,set,pick,myLeague}}/>
       : view==="sim"
       ? <SimTerminal {...{league,teams,fc}}/>
       : view==="tut"
@@ -491,7 +500,8 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
   </div>);
 }
 
-function LeagueView({uname,setUname,season,setSeason,syncLeagues,leagues,loadLeague,league,teams,lStatus,fc,players,pick}){
+function LeagueView({uname,setUname,season,setSeason,syncLeagues,leagues,loadLeague,league,teams,lStatus,fc,players,pick,setMyTeam,myLeague}){
+  const mineHere=myLeague&&league&&myLeague.leagueId===league.league_id;
   return (
   <div style={{marginTop:12}}>
     <div className="panel pad">
@@ -526,80 +536,150 @@ function LeagueView({uname,setUname,season,setSeason,syncLeagues,leagues,loadLea
         <div className="row" style={{gridTemplateColumns:"1fr"}}>
           {teams.map((t,i)=>{
             const max=fc?Math.max(...teams.map(x=>x.val)):1;
+            const isMine=mineHere&&myLeague.myRosterId===t.rid;
             return (
-            <div key={t.rid} className="teamcard" style={{cursor:"default"}}>
+            <div key={t.rid} className="teamcard" style={{cursor:"default",borderColor:isMine?"var(--buy)":undefined,background:isMine?"rgba(126,231,135,.06)":undefined}}>
               <span className="rk">{i+1}</span>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
+                <div style={{fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}{isMine&&<span className="mono" style={{color:"var(--buy)",fontSize:10}}> ★ my team</span>}</div>
                 <div className="mono small mut">{t.w}-{t.l} · {t.players.length} players</div>
                 {fc && <div className="bar" style={{marginTop:6}}><div style={{width:(t.val/max*100)+"%",background:"var(--wr)"}}></div></div>}
               </div>
               {fc && <span className="mono" style={{color:"var(--wr)",fontWeight:500}}>{fmt(t.val)}</span>}
+              <span className={"toggle"+(isMine?" on":"")} style={{whiteSpace:"nowrap"}} onClick={()=>setMyTeam(t.rid)}>{isMine?"saved":"this is me"}</span>
             </div>);
           })}
         </div>
-        <div className="note">click a player in the command bar to inspect any name; per-roster drilldown + the trade-finder land in chunk 3.</div>
+        <div className="note">{mineHere?"your team is saved — head to the trd tab to build trades and get target suggestions.":"tap \"this is me\" on your team to save it, then the trade terminal can suggest targets from this league."}</div>
       </div>}
   </div>);
 }
 
 function sigFlag(sig,p){if(!sig||!p||!p.espn_id)return null;const s=sig.players[String(p.espn_id)];return s?s.flag:null;}
 
-function TradeTerminal({players,fc,fcName,sig,pick}){
-  const [a,setA]=useState([]);const [b,setB]=useState([]);
-  const [q,setQ]=useState("");const [side,setSide]=useState("a");
+const PICKS=[["2026 early 1st",5000],["2026 mid 1st",4200],["2026 late 1st",3500],["2026 2nd",1500],["2026 3rd",600],["2027 1st",3800],["2027 2nd",1300],["2027 3rd",550]];
+function PosChip({pos}){return <span className="pos" style={{color:pos==="PICK"?"var(--pick)":POS[pos],background:pos==="PICK"?"rgba(185,139,255,.15)":posBg(pos)}}>{pos}</span>;}
+
+function TradeTerminal({players,fc,fcName,sig,set,pick,myLeague}){
+  const mine=myLeague&&players;
+  const [get,setGet]=useState([]);const [give,setGive]=useState([]);
+  const [q,setQ]=useState("");const [qside,setQside]=useState("get");const [mode,setMode]=useState("fit");
   const pidx=useMemo(()=>players?Object.values(players).filter(p=>["QB","RB","WR","TE"].includes(p.position)&&p.team&&p.full_name).sort((x,y)=>(x.search_rank||9999)-(y.search_rank||9999)):[],[players]);
   const sugg=q.trim()?pidx.filter(p=>p.full_name.toLowerCase().includes(q.toLowerCase())).slice(0,6):[];
-  const valOf=p=>{const o=fcVal(fc,fcName,p);return o?o.value:0;};
-  const add=p=>{(side==="a"?setA:setB)(prev=>prev.find(x=>x.player_id===p.player_id)?prev:[...prev,p]);setQ("");};
-  const rm=(s,p)=>(s==="a"?setA:setB)(prev=>prev.filter(x=>x.player_id!==p.player_id));
-  const sumA=a.reduce((s,p)=>s+valOf(p),0),sumB=b.reduce((s,p)=>s+valOf(p),0);
+  const valOf=it=>it.pick?it.value:(o=>o?o.value:0)(fcVal(fc,fcName,it));
+  const keyOf=it=>it.pick?it.id:it.player_id;
+  const nameOf=it=>it.pick?it.name:it.full_name;
+  const posOf=it=>it.pick?"PICK":it.position;
+  const has=(list,it)=>list.find(x=>keyOf(x)===keyOf(it));
+  const addTo=(setter,it)=>setter(prev=>has(prev,it)?prev:[...prev,it]);
+  const rmFrom=(setter,it)=>setter(prev=>prev.filter(x=>keyOf(x)!==keyOf(it)));
+
+  // my roster, league pool, positional needs
+  const resolve=ids=>(ids||[]).map(id=>players&&players[id]).filter(Boolean);
+  const myTeam=mine?myLeague.teams.find(t=>t.rid===myLeague.myRosterId):null;
+  const myPlayers=myTeam?resolve(myTeam.playerIds).sort((a,b)=>valOf(b)-valOf(a)):[];
+  const pool=mine?myLeague.teams.filter(t=>t.rid!==myLeague.myRosterId).flatMap(t=>resolve(t.playerIds).map(p=>({p,owner:t.name}))):[];
+  const posSum=pls=>{const s={QB:0,RB:0,WR:0,TE:0};pls.forEach(p=>{if(s[p.position]!=null)s[p.position]+=valOf(p);});return s;};
+  const myS=posSum(myPlayers);
+  const sums=mine?myLeague.teams.map(t=>posSum(resolve(t.playerIds))):[];
+  const avg={};["QB","RB","WR","TE"].forEach(P=>avg[P]=sums.length?sums.reduce((a,b)=>a+b[P],0)/sums.length:0);
+  const needs=["QB","RB","WR","TE"].map(P=>({P,need:avg[P]-(myS[P]||0)})).sort((a,b)=>b.need-a.need);
+  const weak=needs.filter(n=>n.need>0).slice(0,2).map(n=>n.P);
+  const fb=p=>sigFlag(sig,p)==="buy"?1.06:1;
+  const ranked=pool.slice().sort((a,b)=>valOf(b.p)*fb(b.p)-valOf(a.p)*fb(a.p));
+  const targets=(mode==="fit"&&weak.length?ranked.filter(x=>weak.includes(x.p.position)):ranked).slice(0,6);
+
+  const sumG=get.reduce((s,i)=>s+valOf(i),0),sumGv=give.reduce((s,i)=>s+valOf(i),0);
   const adj=(sum,c,oc)=>c>oc?sum*(1-0.04*(c-oc)):sum;
-  const adjA=adj(sumA,a.length,b.length),adjB=adj(sumB,b.length,a.length);
-  const diff=adjA-adjB,tot=Math.max(adjA,adjB,1);
-  const verdict=!a.length||!b.length?"add players to both sides":Math.abs(diff)/tot<0.08?"fair trade":diff>0?"favors side A":"favors side B";
-  const Col=({title,list,s,sum,adjsum})=>(
+  const aG=adj(sumG,get.length,give.length),aGv=adj(sumGv,give.length,get.length);
+  const diff=aGv-aG;const tot=Math.max(aG,aGv,1);
+  const verdict=!get.length||!give.length?"build a trade":Math.abs(diff)/tot<0.08?"fair":diff>0?"you win value":"you overpay";
+  const lblGet=mine?"I get":"side A",lblGive=mine?"I give":"side B";
+
+  const Col=({title,list,setter,sum,adjsum})=>(
     <div className="panel pad">
       <div className="head" style={{marginBottom:8}}><div className="lbl">{title}</div><div className="mono small" style={{color:"var(--wr)"}}>{fmt(adjsum)}</div></div>
       {list.length===0&&<div className="mono faint" style={{fontSize:11,padding:"4px 0"}}>empty</div>}
-      {list.map(p=>{const fl=sigFlag(sig,p);return(
-        <div key={p.player_id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid var(--line)"}}>
-          <span className="pos" style={{color:POS[p.position],background:posBg(p.position)}}>{p.position}</span>
-          <span style={{flex:1,fontSize:13}}>{p.full_name}{fl==="buy"&&<span className="mono" style={{color:"var(--buy)",fontSize:10}}> · buy</span>}</span>
-          <span className="mono small mut">{fmt(valOf(p))}</span>
-          <span onClick={()=>rm(s,p)} style={{cursor:"pointer",color:"var(--faint)"}}>×</span>
+      {list.map(it=>{const fl=!it.pick&&sigFlag(sig,it);return(
+        <div key={keyOf(it)} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid var(--line)"}}>
+          <PosChip pos={posOf(it)}/>
+          <span style={{flex:1,fontSize:13}}>{nameOf(it)}{fl==="buy"&&<span className="mono" style={{color:"var(--buy)",fontSize:10}}> · buy</span>}</span>
+          <span className="mono small mut">{fmt(valOf(it))}</span>
+          <span onClick={()=>rmFrom(setter,it)} style={{cursor:"pointer",color:"var(--faint)"}}>×</span>
         </div>);})}
-      {adjsum!==sum&&<div className="mono faint" style={{fontSize:10,marginTop:5}}>raw {fmt(sum)} · −{Math.round((1-adjsum/sum)*100)}% roster-spot tax</div>}
+      {adjsum!==sum&&sum>0&&<div className="mono faint" style={{fontSize:10,marginTop:5}}>raw {fmt(sum)} · −{Math.round((1-adjsum/sum)*100)}% roster-spot tax</div>}
     </div>);
+
   return (
   <div style={{marginTop:12}}>
-    <div className="panel pad">
+    {mine && <div className="panel pad">
+      <div className="head" style={{marginBottom:8}}><div className="lbl">my roster · {myTeam?myTeam.name:""}</div>
+        <div className="mono faint" style={{fontSize:11}}>{myLeague.leagueName}</div></div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {myPlayers.map(p=>(
+          <span key={p.player_id} onClick={()=>addTo(setGive,p)} title="add to I give"
+            style={{cursor:"pointer",fontSize:12,padding:"4px 8px",borderRadius:6,border:"1px solid var(--line2)",background:has(give,p)?"rgba(126,231,135,.08)":"var(--panel2)",opacity:has(give,p)?.5:1}}>
+            <span style={{color:POS[p.position]}}>{p.position}</span> {p.full_name} <span className="mut">{fmt(valOf(p))}</span></span>))}
+      </div>
+      <div className="lbl" style={{margin:"12px 0 6px"}}>my picks</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {PICKS.map(([nm,v])=>{const it={pick:true,id:"pk_"+nm,name:nm,value:v};return(
+          <span key={nm} onClick={()=>addTo(setGive,it)}
+            style={{cursor:"pointer",fontSize:12,padding:"4px 8px",borderRadius:6,border:"1px solid var(--line2)",background:has(give,it)?"rgba(126,231,135,.08)":"var(--panel2)",opacity:has(give,it)?.5:1}}>
+            <span style={{color:"var(--pick)"}}>◆</span> {nm} <span className="mut">{fmt(v)}</span></span>);})}
+      </div>
+      <div className="note">pick values are dynasty estimates — auto-deriving your exact owned picks from Sleeper trades is a follow-up.</div>
+    </div>}
+
+    {mine && <div className="panel pad" style={{marginTop:12}}>
+      <div className="head"><div className="lbl">positional needs</div>
+        <div style={{display:"flex",gap:6}}>
+          <span className={"toggle"+(mode==="fit"?" on":"")} onClick={()=>setMode("fit")}>fill needs</span>
+          <span className={"toggle"+(mode==="bpa"?" on":"")} onClick={()=>setMode("bpa")}>best available</span></div></div>
+      <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:8}}>
+        {needs.map(n=>(<div key={n.P} style={{fontSize:12}}>
+          <span style={{color:POS[n.P]}}>{n.P}</span> <span className="mono" style={{color:n.need>0?"var(--warn)":"var(--buy)"}}>{n.need>0?"need":"surplus"}</span>
+          <span className="mut mono" style={{fontSize:10}}> {n.need>0?"−":"+"}{fmt(Math.abs(Math.round(n.need)))}</span></div>))}
+      </div>
+      <div className="lbl" style={{margin:"12px 0 6px"}}>{mode==="fit"?"targets at your weak spots":"top targets in your league"}</div>
+      {targets.length===0&&<div className="mono faint" style={{fontSize:11}}>no targets — load FantasyCalc values (deploy)</div>}
+      {targets.map(({p,owner})=>{const fl=sigFlag(sig,p);const added=has(get,p);return(
+        <div key={p.player_id} onClick={()=>addTo(setGet,p)} className="opt" style={{borderRadius:7,opacity:added?.5:1}}>
+          <PosChip pos={p.position}/>
+          <span style={{flex:1}}>{p.full_name}{fl==="buy"&&<span className="mono" style={{color:"var(--buy)",fontSize:10}}> · buy</span>}
+            <span className="mut mono" style={{fontSize:10}}> · {owner}</span></span>
+          <span className="mono small mut">{fmt(valOf(p))}</span>
+          <span className="mono" style={{color:"var(--wr)",fontSize:11}}>+ get</span></div>);})}
+    </div>}
+
+    <div className="panel pad" style={{marginTop:12}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <span className="lbl">add to</span>
-        <span className={"toggle"+(side==="a"?" on":"")} onClick={()=>setSide("a")}>side A</span>
-        <span className={"toggle"+(side==="b"?" on":"")} onClick={()=>setSide("b")}>side B</span>
+        <span className="lbl">search → </span>
+        <span className={"toggle"+(qside==="get"?" on":"")} onClick={()=>setQside("get")}>{lblGet}</span>
+        <span className={"toggle"+(qside==="give"?" on":"")} onClick={()=>setQside("give")}>{lblGive}</span>
         <div style={{position:"relative",flex:"1 1 220px"}}>
-          <input className="field" style={{width:"100%"}} placeholder={`search a player → side ${side.toUpperCase()}`} value={q} onChange={e=>setQ(e.target.value)}/>
+          <input className="field" style={{width:"100%"}} placeholder={`search any player → ${qside==="get"?lblGet:lblGive}`} value={q} onChange={e=>setQ(e.target.value)}/>
           {sugg.length>0&&<div className="drop">{sugg.map(p=>(
-            <div key={p.player_id} className="opt" onMouseDown={()=>add(p)}>
-              <span className="pos" style={{color:POS[p.position],background:posBg(p.position)}}>{p.position}</span>
-              <span style={{flex:1}}>{p.full_name}</span><span className="mono small mut">{fmt(valOf(p))}</span></div>))}</div>}
+            <div key={p.player_id} className="opt" onMouseDown={()=>{addTo(qside==="get"?setGet:setGive,p);setQ("");}}>
+              <PosChip pos={p.position}/><span style={{flex:1}}>{p.full_name}</span><span className="mono small mut">{fmt(valOf(p))}</span></div>))}</div>}
         </div>
       </div>
-      {!fc&&<div className="note">values source not loaded — totals need FantasyCalc (loads on deploy).</div>}
+      {!fc&&<div className="note">values need FantasyCalc (loads on deploy).</div>}
     </div>
+
     <div className="row" style={{gridTemplateColumns:"1fr 1fr"}}>
-      <Col title="side A gets" list={a} s="a" sum={sumA} adjsum={adjA}/>
-      <Col title="side B gets" list={b} s="b" sum={sumB} adjsum={adjB}/>
+      <Col title={lblGet} list={get} setter={setGet} sum={sumG} adjsum={aG}/>
+      <Col title={lblGive} list={give} setter={setGive} sum={sumGv} adjsum={aGv}/>
     </div>
-    <div className="panel pad" style={{marginTop:12,borderColor:verdict.includes("fair")?"var(--buy)":"var(--line2)"}}>
+
+    <div className="panel pad" style={{marginTop:12,borderColor:verdict==="fair"?"var(--buy)":"var(--line2)"}}>
       <div className="head"><div className="lbl">verdict</div>
-        <div className="mono" style={{color:verdict.includes("fair")?"var(--buy)":verdict.includes("add")?"var(--mut)":"var(--warn)"}}>{verdict}</div></div>
-      {a.length>0&&b.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
-        <span className="mono small mut" style={{width:60}}>A {fmt(adjA)}</span>
-        <div className="bar" style={{flex:1}}><div style={{width:(adjA/(adjA+adjB)*100)+"%",background:"var(--wr)"}}></div></div>
-        <span className="mono small mut" style={{width:60,textAlign:"right"}}>{fmt(adjB)} B</span></div>}
-      <div className="note">values are FantasyCalc at your league format; the roster-spot tax (4%/extra body) models dynasty consolidation. the revealed-preference trade-solve + window-aware weighting land with the live chunk-2 feed.</div>
+        <div className="mono" style={{color:verdict==="fair"?"var(--buy)":verdict==="build a trade"?"var(--mut)":verdict==="you win value"?"var(--buy)":"var(--warn)"}}>{verdict}</div></div>
+      {get.length>0&&give.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
+        <span className="mono small mut" style={{width:64}}>{lblGet} {fmt(aG)}</span>
+        <div className="bar" style={{flex:1}}><div style={{width:(aG/(aG+aGv)*100)+"%",background:"var(--wr)"}}></div></div>
+        <span className="mono small mut" style={{width:64,textAlign:"right"}}>{fmt(aGv)} {lblGive}</span></div>}
+      <div className="note">FantasyCalc values at your format; roster-spot tax (4%/extra body) models consolidation. revealed-preference solve + window weighting arrive with the live chunk-2 feed.</div>
     </div>
   </div>);
 }
