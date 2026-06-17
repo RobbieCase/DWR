@@ -462,7 +462,6 @@ function LeagueView({uname,setUname,season,setSeason,syncLeagues,leagues,loadLea
       <div style={{marginTop:12}}>
         <div className="head" style={{marginBottom:8}}>
           <div className="mono mut small">{league.name} · {fc?"power ranking by roster value":"by record"}</div>
-          <button className="btn" onClick={()=>loadLeague(null)||window.location.reload()} style={{display:"none"}}></button>
         </div>
         <div className="row" style={{gridTemplateColumns:"1fr"}}>
           {teams.map((t,i)=>{
