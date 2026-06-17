@@ -81,6 +81,13 @@
   .note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:8px;line-height:1.6}
   .err{color:var(--sell);font-family:var(--mono);font-size:12px}
   .ok{color:var(--buy)}
+  .tip{position:relative;border-bottom:1px dotted var(--faint);cursor:help}
+  .tip .tipbox{display:none;position:absolute;bottom:135%;left:0;width:250px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:10px 12px;font-family:var(--sans);font-size:12px;color:var(--tx);line-height:1.55;z-index:60}
+  .tip:hover .tipbox{display:block}
+  .gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:12px}
+  .gcard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 13px}
+  .gcard .t{font-family:var(--mono);font-size:12px;color:var(--wr);margin-bottom:4px}
+  .gcard .d{font-size:12px;color:var(--mut);line-height:1.55}
   @media(max-width:760px){.h1{font-size:20px}}
 </style>
 </head>
@@ -221,13 +228,30 @@ function App(){
         </div>}
     </div>
 
-    {/* function tabs — clickable */}
+    {/* function tabs */}
     <div className="tabs">
-      {[["val","value"],["use","usage"],["mkt","market"],["trd","trade"],["comp","comps"],["news","wire"],["sim","season"]].map(([k,d])=>(
-        <span key={k} className={"tab"+(fn===k?" on":"")} onClick={()=>setFn(k)}><b>{k}</b> {d}</span>
+      {[["val","value"],["use","usage"],["mkt","market"],["comp","comps"],["news","wire"]].map(([k,d])=>(
+        <span key={k} className={"tab"+(view==="player"&&fn===k?" on":"")} onClick={()=>{setFn(k);setView("player");}}><b>{k}</b> {d}</span>
       ))}
+      <span className={"tab"+(view==="trade"?" on":"")} onClick={()=>setView("trade")}><b>trd</b> trade</span>
+      <span className={"tab"+(view==="sim"?" on":"")} onClick={()=>setView("sim")}><b>sim</b> season</span>
+      <span className={"tab"+(view==="tut"?" on":"")} onClick={()=>setView("tut")}><b>?</b> guide</span>
       <span className={"tab"+(view==="league"?" on":"")} style={{marginLeft:"auto"}} onClick={()=>setView(view==="league"?"player":"league")}>
         <b>lg</b> {view==="league"?"close":"my league"}</span>
+    </div>
+
+    {/* global league format */}
+    <div className="selset" style={{marginTop:8}}>
+      <span className="lbl">format</span>
+      <span className={"toggle"+(!set.sf?" on":"")} onClick={()=>setSet({...set,sf:false})}>1qb</span>
+      <span className={"toggle"+(set.sf?" on":"")} onClick={()=>setSet({...set,sf:true})}>superflex</span>
+      <span style={{width:1,height:18,background:"var(--line2)",margin:"0 3px"}}></span>
+      <span className={"toggle"+(set.ppr===1?" on":"")} onClick={()=>setSet({...set,ppr:1})}>ppr</span>
+      <span className={"toggle"+(set.ppr===0.5?" on":"")} onClick={()=>setSet({...set,ppr:0.5})}>half</span>
+      <span style={{width:1,height:18,background:"var(--line2)",margin:"0 3px"}}></span>
+      <span className={"toggle"+(set.teams===10?" on":"")} onClick={()=>setSet({...set,teams:10})}>10-tm</span>
+      <span className={"toggle"+(set.teams===12?" on":"")} onClick={()=>setSet({...set,teams:12})}>12-tm</span>
+      <span className={"toggle"+(set.teams===14?" on":"")} onClick={()=>setSet({...set,teams:14})}>14-tm</span>
     </div>
 
     {/* WIRE */}
@@ -247,6 +271,12 @@ function App(){
       ? <LeagueView {...{uname,setUname,season,setSeason,syncLeagues,leagues,loadLeague,league,teams,lStatus,fc,players,pick}}/>
       : view==="depth"
       ? <DepthChart {...{team:depthTeam,players,fc,fcName,pick,sel,onBack:()=>setView("player")}}/>
+      : view==="trade"
+      ? <TradeTerminal {...{players,fc,fcName,sig,pick}}/>
+      : view==="sim"
+      ? <SimTerminal {...{league,teams,fc}}/>
+      : view==="tut"
+      ? <Tutorial/>
       : <PlayerView {...{sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,pick}}/>}
 
     <div className="note" style={{marginTop:18,borderTop:"1px solid var(--line)",paddingTop:12}}>
@@ -343,16 +373,6 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
 
   return (
   <div style={{marginTop:12}}>
-    {/* settings */}
-    <div className="selset">
-      <span className="lbl">league format</span>
-      <span className={"toggle"+(set.sf?" on":"")} onClick={()=>setSet({...set,sf:!set.sf})}>{set.sf?"superflex":"1qb"}</span>
-      <span className={"toggle"+(set.ppr===1?" on":"")} onClick={()=>setSet({...set,ppr:1})}>ppr</span>
-      <span className={"toggle"+(set.ppr===0.5?" on":"")} onClick={()=>setSet({...set,ppr:0.5})}>half</span>
-      <span className={"toggle"+(set.teams===12?" on":"")} onClick={()=>setSet({...set,teams:12})}>12-tm</span>
-      <span className={"toggle"+(set.teams===10?" on":"")} onClick={()=>setSet({...set,teams:10})}>10-tm</span>
-    </div>
-
     {/* header card */}
     <div className="panel pad" style={{marginTop:12}}>
       <div className="head">
@@ -520,6 +540,173 @@ function LeagueView({uname,setUname,season,setSeason,syncLeagues,leagues,loadLea
         </div>
         <div className="note">click a player in the command bar to inspect any name; per-roster drilldown + the trade-finder land in chunk 3.</div>
       </div>}
+  </div>);
+}
+
+function sigFlag(sig,p){if(!sig||!p||!p.espn_id)return null;const s=sig.players[String(p.espn_id)];return s?s.flag:null;}
+
+function TradeTerminal({players,fc,fcName,sig,pick}){
+  const [a,setA]=useState([]);const [b,setB]=useState([]);
+  const [q,setQ]=useState("");const [side,setSide]=useState("a");
+  const pidx=useMemo(()=>players?Object.values(players).filter(p=>["QB","RB","WR","TE"].includes(p.position)&&p.team&&p.full_name).sort((x,y)=>(x.search_rank||9999)-(y.search_rank||9999)):[],[players]);
+  const sugg=q.trim()?pidx.filter(p=>p.full_name.toLowerCase().includes(q.toLowerCase())).slice(0,6):[];
+  const valOf=p=>{const o=fcVal(fc,fcName,p);return o?o.value:0;};
+  const add=p=>{(side==="a"?setA:setB)(prev=>prev.find(x=>x.player_id===p.player_id)?prev:[...prev,p]);setQ("");};
+  const rm=(s,p)=>(s==="a"?setA:setB)(prev=>prev.filter(x=>x.player_id!==p.player_id));
+  const sumA=a.reduce((s,p)=>s+valOf(p),0),sumB=b.reduce((s,p)=>s+valOf(p),0);
+  const adj=(sum,c,oc)=>c>oc?sum*(1-0.04*(c-oc)):sum;
+  const adjA=adj(sumA,a.length,b.length),adjB=adj(sumB,b.length,a.length);
+  const diff=adjA-adjB,tot=Math.max(adjA,adjB,1);
+  const verdict=!a.length||!b.length?"add players to both sides":Math.abs(diff)/tot<0.08?"fair trade":diff>0?"favors side A":"favors side B";
+  const Col=({title,list,s,sum,adjsum})=>(
+    <div className="panel pad">
+      <div className="head" style={{marginBottom:8}}><div className="lbl">{title}</div><div className="mono small" style={{color:"var(--wr)"}}>{fmt(adjsum)}</div></div>
+      {list.length===0&&<div className="mono faint" style={{fontSize:11,padding:"4px 0"}}>empty</div>}
+      {list.map(p=>{const fl=sigFlag(sig,p);return(
+        <div key={p.player_id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid var(--line)"}}>
+          <span className="pos" style={{color:POS[p.position],background:posBg(p.position)}}>{p.position}</span>
+          <span style={{flex:1,fontSize:13}}>{p.full_name}{fl==="buy"&&<span className="mono" style={{color:"var(--buy)",fontSize:10}}> · buy</span>}</span>
+          <span className="mono small mut">{fmt(valOf(p))}</span>
+          <span onClick={()=>rm(s,p)} style={{cursor:"pointer",color:"var(--faint)"}}>×</span>
+        </div>);})}
+      {adjsum!==sum&&<div className="mono faint" style={{fontSize:10,marginTop:5}}>raw {fmt(sum)} · −{Math.round((1-adjsum/sum)*100)}% roster-spot tax</div>}
+    </div>);
+  return (
+  <div style={{marginTop:12}}>
+    <div className="panel pad">
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span className="lbl">add to</span>
+        <span className={"toggle"+(side==="a"?" on":"")} onClick={()=>setSide("a")}>side A</span>
+        <span className={"toggle"+(side==="b"?" on":"")} onClick={()=>setSide("b")}>side B</span>
+        <div style={{position:"relative",flex:"1 1 220px"}}>
+          <input className="field" style={{width:"100%"}} placeholder={`search a player → side ${side.toUpperCase()}`} value={q} onChange={e=>setQ(e.target.value)}/>
+          {sugg.length>0&&<div className="drop">{sugg.map(p=>(
+            <div key={p.player_id} className="opt" onMouseDown={()=>add(p)}>
+              <span className="pos" style={{color:POS[p.position],background:posBg(p.position)}}>{p.position}</span>
+              <span style={{flex:1}}>{p.full_name}</span><span className="mono small mut">{fmt(valOf(p))}</span></div>))}</div>}
+        </div>
+      </div>
+      {!fc&&<div className="note">values source not loaded — totals need FantasyCalc (loads on deploy).</div>}
+    </div>
+    <div className="row" style={{gridTemplateColumns:"1fr 1fr"}}>
+      <Col title="side A gets" list={a} s="a" sum={sumA} adjsum={adjA}/>
+      <Col title="side B gets" list={b} s="b" sum={sumB} adjsum={adjB}/>
+    </div>
+    <div className="panel pad" style={{marginTop:12,borderColor:verdict.includes("fair")?"var(--buy)":"var(--line2)"}}>
+      <div className="head"><div className="lbl">verdict</div>
+        <div className="mono" style={{color:verdict.includes("fair")?"var(--buy)":verdict.includes("add")?"var(--mut)":"var(--warn)"}}>{verdict}</div></div>
+      {a.length>0&&b.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
+        <span className="mono small mut" style={{width:60}}>A {fmt(adjA)}</span>
+        <div className="bar" style={{flex:1}}><div style={{width:(adjA/(adjA+adjB)*100)+"%",background:"var(--wr)"}}></div></div>
+        <span className="mono small mut" style={{width:60,textAlign:"right"}}>{fmt(adjB)} B</span></div>}
+      <div className="note">values are FantasyCalc at your league format; the roster-spot tax (4%/extra body) models dynasty consolidation. the revealed-preference trade-solve + window-aware weighting land with the live chunk-2 feed.</div>
+    </div>
+  </div>);
+}
+
+function SimTerminal({league,teams,fc}){
+  const [res,setRes]=useState(null);const [busy,setBusy]=useState(false);const [status,setStatus]=useState("");
+  async function run(){
+    if(!league||!teams){return;}
+    setBusy(true);setStatus("loading schedule…");setRes(null);
+    try{
+      const start=(league.settings&&league.settings.playoff_week_start)||15;
+      const weeks=[];for(let w=1;w<start;w++)weeks.push(w);
+      const all=await Promise.all(weeks.map(w=>jget(`${SLEEP}/league/${league.league_id}/matchups/${w}`).catch(()=>null)));
+      const sched=[];
+      all.forEach(wk=>{if(!wk)return;const byM={};wk.forEach(e=>{if(e.matchup_id==null)return;(byM[e.matchup_id]=byM[e.matchup_id]||[]).push(e.roster_id);});Object.values(byM).forEach(pr=>{if(pr.length===2)sched.push(pr);});});
+      if(!sched.length){setStatus("no schedule found for this league");setBusy(false);return;}
+      const strength={};teams.forEach(t=>strength[t.rid]=fc?Math.max(t.val,1):(t.w*120+1000));
+      const vs=Object.values(strength);const mean=vs.reduce((a,b)=>a+b,0)/vs.length;
+      const sd=Math.sqrt(vs.reduce((a,b)=>a+(b-mean)**2,0)/vs.length)||1;
+      const z=r=>(strength[r]-mean)/sd;
+      const SIMS=3000,pN=(league.settings&&league.settings.playoff_teams)||6;
+      const titles={},po={};teams.forEach(t=>{titles[t.rid]=0;po[t.rid]=0;});
+      setStatus("running 3,000 seasons…");
+      for(let s=0;s<SIMS;s++){
+        const w={};teams.forEach(t=>w[t.rid]=0);
+        sched.forEach(([ra,rb])=>{const pa=1/(1+Math.exp(-0.9*(z(ra)-z(rb))));if(Math.random()<pa)w[ra]++;else w[rb]++;});
+        const order=teams.map(t=>t.rid).sort((x,y)=>(w[y]-w[x])||(strength[y]-strength[x]));
+        const seed=order.slice(0,pN);seed.forEach(r=>po[r]++);
+        let f=[...seed];while(f.length>1){const nx=[];for(let i=0;i<f.length;i+=2){const ra=f[i],rb=f[i+1];if(rb==null){nx.push(ra);continue;}const pa=1/(1+Math.exp(-0.9*(z(ra)-z(rb))));nx.push(Math.random()<pa?ra:rb);}f=nx;}
+        if(f[0]!=null)titles[f[0]]++;
+      }
+      setRes(teams.map(t=>({name:t.name,playoff:po[t.rid]/SIMS,title:titles[t.rid]/SIMS})).sort((a,b)=>b.title-a.title));
+      setStatus("");
+    }catch(e){setStatus("sim failed — try re-syncing the league");}
+    setBusy(false);
+  }
+  if(!league||!teams) return (
+    <div className="panel pad" style={{marginTop:12,textAlign:"center",padding:"36px 16px"}}>
+      <div className="mono mut">no league synced</div>
+      <div className="note">open the <b>lg</b> tab, sync a league and load it, then come back to run the season sim.</div>
+    </div>);
+  return (
+  <div style={{marginTop:12}}>
+    <div className="panel pad">
+      <div className="head"><div className="lbl">season sim · {league.name}</div>
+        <button className="btn" onClick={run} disabled={busy}>{busy?"running…":"run 3,000 seasons"}</button></div>
+      {status&&<div className="note">{status}</div>}
+      <div className="note">monte-carlo over the real schedule; each game decided by {fc?"roster value":"current record"} strength (logistic). playoff bracket is approximate (seed-order single elim).</div>
+    </div>
+    {res&&<div className="row" style={{gridTemplateColumns:"1fr"}}>
+      {res.map((t,i)=>(
+        <div key={i} className="teamcard" style={{cursor:"default"}}>
+          <span className="rk">{i+1}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.name}</div>
+            <div className="bar" style={{marginTop:6}}><div style={{width:(t.playoff*100)+"%",background:"var(--wr)"}}></div></div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div className="mono small" style={{color:"var(--buy)"}}>{(t.title*100).toFixed(1)}% title</div>
+            <div className="mono faint" style={{fontSize:11}}>{(t.playoff*100).toFixed(0)}% playoff</div>
+          </div>
+        </div>))}
+    </div>}
+  </div>);
+}
+
+const GLOSSARY=[
+  ["market value","FantasyCalc's trade value — derived from real trades across thousands of leagues, at your league format. The crowd's price."],
+  ["intrinsic · v0","A transparent placeholder: market × position age-curve × clamped 30-day momentum. Chunk 2's backtested model replaces it."],
+  ["edge","(intrinsic − market) / market. Positive = the model reads the player as underpriced vs the market."],
+  ["usage z · opp","How a player's opportunity ranks vs their position that season, in standard deviations. +2σ ≈ elite usage, 0 ≈ average."],
+  ["usage gap","opportunity z minus scoring z. Positive = getting the opportunity but not yet scoring it — a positive-regression / buy lean."],
+  ["flag · buy","Top-quartile usage gap within position. Backtested: these flags improved their later scoring above the base rate."],
+  ["target depth / σ bars","Per-game usage (targets, touches, etc.) standardized within position; bar length is the z-score, the number is the raw rate."],
+  ["comps","Nearest players by standardized usage + production profile within position — statistical role twins, not name-brand guesses."],
+  ["roster-spot tax","In dynasty, extra bodies cost roster spots. The trade terminal discounts the side receiving more players to model consolidation."],
+];
+function TipMetric({term,children}){
+  const g=GLOSSARY.find(x=>x[0]===term);
+  return <span className="tip">{children}<span className="tipbox"><b style={{color:"var(--wr)"}}>{term}</b><br/>{g?g[1]:""}</span></span>;
+}
+function Tutorial(){
+  return (
+  <div style={{marginTop:12}}>
+    <div className="panel pad">
+      <div className="lbl" style={{marginBottom:6}}>guide · hover any underlined term</div>
+      <div className="small mut">A worked example. Every metric below is hover-explained; the full glossary is underneath for mobile.</div>
+    </div>
+    <div className="panel pad" style={{marginTop:12}}>
+      <div style={{fontSize:20,fontWeight:600}}>J. Example <span className="mono small mut" style={{fontWeight:400}}>· WR · DAL · 24.3y</span></div>
+      <div className="row" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+        <div className="metric"><div className="lbl"><TipMetric term="market value">market value</TipMetric></div><div className="v">6,200</div></div>
+        <div className="metric"><div className="lbl"><TipMetric term="intrinsic · v0">intrinsic · v0</TipMetric></div><div className="v" style={{color:"var(--wr)"}}>6,820</div></div>
+        <div className="metric"><div className="lbl"><TipMetric term="edge">edge</TipMetric></div><div className="v" style={{color:"var(--buy)"}}>+10.0%</div></div>
+      </div>
+      <div className="panel pad" style={{marginTop:12,borderColor:"var(--buy)"}}>
+        <div className="lbl" style={{marginBottom:8}}>usage signal · 2025 · backtested</div>
+        <div className="row" style={{gridTemplateColumns:"repeat(3,1fr)",marginTop:0}}>
+          <div className="metric"><div className="lbl"><TipMetric term="usage z · opp">usage z · opp</TipMetric></div><div className="v" style={{color:"var(--wr)"}}>+1.9</div></div>
+          <div className="metric"><div className="lbl"><TipMetric term="usage gap">usage gap</TipMetric></div><div className="v" style={{color:"var(--buy)"}}>+0.6</div></div>
+          <div className="metric"><div className="lbl"><TipMetric term="flag · buy">flag</TipMetric></div><div className="v" style={{color:"var(--buy)"}}>buy</div></div>
+        </div>
+      </div>
+    </div>
+    <div className="gloss">
+      {GLOSSARY.map(([t,d])=>(<div key={t} className="gcard"><div className="t">{t}</div><div className="d">{d}</div></div>))}
+    </div>
   </div>);
 }
 
