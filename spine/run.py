@@ -55,10 +55,14 @@ def main():
     by_pos = {}
     for _, r in feed_df.iterrows():
         pid = int(r.PlayerId); by_pos[r["pos"]] = by_pos.get(r["pos"], 0) + 1
+        snap = float(r["snap"]) if "snap" in r and r["snap"] > 0 else None
+        ay = float(r["ay"]) if "ay" in r and r["ay"] > 0 else None
         feed["players"][str(pid)] = dict(
             name=r["name"], pos=r["pos"], team=r["team"], season=int(r.season),
             z_opp=round(float(r.z_opp), 2), gap=round(float(r.gap), 2),
             flag="buy" if r.gap >= r["q"] else None,
+            snap=round(snap, 3) if snap is not None else None,   # nflverse snap share (display)
+            ay=round(ay, 3) if ay is not None else None,         # nflverse air-yards share (display)
             m={c: round(float(r[c]), 1) for c in SIM_COLS},
             z={c: round(float(r["z_" + c]), 2) for c in SIM_COLS},
             comps=comps.get(pid, []))

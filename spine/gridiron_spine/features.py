@@ -15,16 +15,18 @@ Opportunity is defined per position because "opportunity" means different things
 import pandas as pd, numpy as np
 
 METRICS = ["tgt", "tch", "rz", "shr", "car", "rush", "pas", "pts", "snap", "ay"]
-# base opportunity is always available (hvpkod). nflverse cols (z_snap = snap share,
-# z_ay = air-yards share) are appended per position ONLY when that metric has real
-# data this run — so the signal upgrades on the Action and reverts cleanly in a sandbox.
 BASE_OPP_BY_POS = {
     "QB": ["z_pas", "z_car", "z_rush"],
     "RB": ["z_tch", "z_car", "z_rz"],
     "WR": ["z_tgt", "z_shr", "z_rz"],
     "TE": ["z_tgt", "z_shr", "z_rz"],
 }
-EXTRA_OPP_BY_POS = {"QB": [], "RB": ["z_snap"], "WR": ["z_snap", "z_ay"], "TE": ["z_snap", "z_ay"]}
+# nflverse snap/air-yards (z_snap, z_ay) are fetched and EMITTED for display, but NOT
+# folded into the backtested opportunity score: at the current ~38% name-join coverage
+# it regressed the 2025 out-of-sample buy-flag lift (+11.3pp -> ~flat) while only
+# helping 2024. Re-enable per position here once the join coverage is high enough to
+# improve OOS lift across seasons. (Same id-join fragility tracked elsewhere.)
+EXTRA_OPP_BY_POS = {"QB": [], "RB": [], "WR": [], "TE": []}
 
 def _z(s):
     sd = s.std()

@@ -462,7 +462,13 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
             <span className="mono faint" style={{width:42,textAlign:"right",fontSize:11}}>{z>=0?"+":""}{z}σ</span>
           </div>);
         })}
-        <div className="note">per-game usage vs the {sigP.pos} field ({sigP.season}); bar = standardized within position. snap share / routes / air-yards land with the release-tier nflverse pull on deploy.</div>
+        {(sigP.snap!=null||sigP.ay!=null)&&(
+          <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginTop:4}}>
+            {sigP.snap!=null&&<span className="chip">snap share {(sigP.snap*100).toFixed(0)}%</span>}
+            {sigP.ay!=null&&<span className="chip">air-yards share {(sigP.ay*100).toFixed(0)}%</span>}
+            <span className="mono faint" style={{fontSize:10}}>· nflverse</span>
+          </div>)}
+        <div className="note">per-game usage vs the {sigP.pos} field ({sigP.season}); bar = standardized within position.{(sigP.snap!=null||sigP.ay!=null)?" snap share / air-yards share are from nflverse (shown for context; not yet folded into the backtested gap — see guide).":" snap share / air-yards arrive with the release-tier nflverse pull on deploy."}</div>
       </div>
     )}
 
