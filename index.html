@@ -467,6 +467,7 @@ function NewsItem({a}){
 }
 // ESPN athlete stats — year-by-year, keyed by espn_id (which Sleeper provides), client-side.
 const _statCache={};
+const _gameLogCache={};
 let _espnIdMapPromise=null;
 function loadEspnIdMap(){
   if(!_espnIdMapPromise)_espnIdMapPromise=fetch("./data/espn_ids.json").then(r=>r.ok?r.json():null).catch(()=>null);
@@ -487,14 +488,65 @@ function loadPlayerStats(espnId){
   }catch(e){return null;}})();
   return _statCache[espnId];
 }
+function loadPlayerGameLog(espnId,season){
+  if(!espnId||!season)return Promise.resolve(null);
+  const key=`${espnId}|${season}`;
+  if(_gameLogCache[key])return _gameLogCache[key];
+  _gameLogCache[key]=(async()=>{try{
+    return await jget(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${espnId}/gamelog?season=${season}`);
+  }catch(e){return null;}})();
+  return _gameLogCache[key];
+}
+function parseGameLog(log){
+  if(!log)return {labels:[],rows:[]};
+  const regular=(log.seasonTypes||[]).find(s=>(s.displayName||"").toLowerCase().includes("regular"))||(log.seasonTypes||[])[0];
+  const cat=regular&&regular.categories&&regular.categories.find(c=>c&&Array.isArray(c.events)&&c.events.length);
+  const events=log.events||{};
+  const labels=log.labels||log.displayNames||[];
+  const rows=((cat&&cat.events)||[]).map(e=>{
+    const meta=events[e.eventId]||{};
+    return {id:e.eventId,week:meta.week,atVs:meta.atVs||"",opp:(meta.opponent&&meta.opponent.abbreviation)||"",result:meta.gameResult||"",score:meta.score||"",date:meta.gameDate,stats:e.stats||[]};
+  }).sort((a,b)=>(a.week||99)-(b.week||99));
+  return {labels,rows};
+}
+function GameLog({espnId,season}){
+  const [log,setLog]=useState(undefined);
+  useEffect(()=>{let dead=false;setLog(undefined);
+    loadPlayerGameLog(espnId,season).then(d=>{if(!dead)setLog(d||null);});
+    return ()=>{dead=true;};
+  },[espnId,season]);
+  if(log===undefined)return <div className="stub" style={{marginTop:10}}>loading {season} game log…</div>;
+  const parsed=parseGameLog(log);
+  if(!parsed.rows.length)return <div className="stub" style={{marginTop:10}}>no {season} game log available.</div>;
+  const cols=`44px 68px 72px repeat(${parsed.labels.length},minmax(38px,1fr))`;
+  return (
+  <div className="panel" style={{marginTop:12,overflowX:"auto",borderColor:"rgba(45,212,167,.28)"}}>
+    <div style={{minWidth:620,padding:"12px 14px"}}>
+      <div className="lbl" style={{marginBottom:8}}>game log · {season} regular season</div>
+      <div style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line2)"}}>
+        <span className="lbl">wk</span><span className="lbl">opp</span><span className="lbl">res</span>
+        {parsed.labels.map((l,i)=><span key={i} className="lbl" style={{textAlign:"right"}}>{l}</span>)}
+      </div>
+      {parsed.rows.map(r=>(
+        <div key={r.id} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line)"}}>
+          <span className="mono small" style={{color:"var(--wr)"}}>{r.week||"—"}</span>
+          <span className="mono small">{r.atVs} {r.opp||"—"}</span>
+          <span className="mono small" style={{color:r.result==="W"?"var(--rb)":r.result==="L"?"var(--bad)":"var(--text)"}}>{r.result}{r.score?` ${r.score}`:""}</span>
+          {parsed.labels.map((_,i)=><span key={i} className="mono small" style={{textAlign:"right"}}>{r.stats[i]||"—"}</span>)}
+        </div>))}
+    </div>
+  </div>);
+}
 const CAT_BY_POS={QB:["passing","rushing"],RB:["rushing","receiving"],WR:["receiving","rushing"],TE:["receiving"]};
 function StatHistory({sel}){
   const [cats,setCats]=useState(undefined);
   const [resolvedId,setResolvedId]=useState(null);
+  const [openYear,setOpenYear]=useState(null);
   useEffect(()=>{let dead=false;setCats(undefined);setResolvedId(null);
     resolveEspnId(sel).then(id=>{if(dead)return;setResolvedId(id);return loadPlayerStats(id);})
       .then(c=>{if(!dead)setCats(c||null);});
     return ()=>{dead=true;};},[sel.player_id,sel.espn_id]);
+  useEffect(()=>{setOpenYear(null);},[sel.player_id]);
   if(cats===undefined)return <div className="stub" style={{marginTop:12}}>loading stat history…</div>;
   if(!resolvedId)return <div className="stub" style={{marginTop:12}}>no ESPN stat id found for {sel.full_name} — stat history unavailable.</div>;
   const want=CAT_BY_POS[sel.position]||["receiving"];
@@ -509,13 +561,16 @@ function StatHistory({sel}){
           <div style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line2)"}}>
             <span className="lbl">yr</span>{cat.labels.map((l,i)=><span key={i} className="lbl" style={{textAlign:"right"}}>{l}</span>)}
           </div>
-          {cat.statistics.slice().reverse().map((s,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line)"}}>
-              <span className="mono small" style={{color:"var(--wr)"}}>{s.season?s.season.year:"—"}</span>
+          {cat.statistics.slice().reverse().map((s,i)=>{
+            const year=s.season&&s.season.year;
+            return (
+            <div key={i} onClick={()=>year&&setOpenYear(openYear===year?null:year)} title={year?`show ${year} game log`:""} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line)",cursor:year?"pointer":"default",background:openYear===year?"rgba(45,212,167,.06)":"transparent"}}>
+              <span className="mono small" style={{color:"var(--wr)"}}>{year||"—"} {openYear===year?"▾":"›"}</span>
               {(s.stats||[]).map((v,j)=><span key={j} className="mono small" style={{textAlign:"right"}}>{v}</span>)}
-            </div>))}
+            </div>);})}
         </div>
       </div>);})}
+    {openYear&&<GameLog espnId={resolvedId} season={openYear}/>}
     <div className="note">season-by-season from ESPN, keyed by ESPN id{sel.espn_id?"":" (resolved by nflverse name/position map)"}. in-season the current row updates as games are played.</div>
   </div>);
 }
