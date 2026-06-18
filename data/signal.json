@@ -114,6 +114,10 @@
         "n": 431
       }
     },
+    "aging_window": [
+      2010,
+      2025
+    ],
     "note": "join to Sleeper via players[].espn_id == key"
   },
   "players": {
