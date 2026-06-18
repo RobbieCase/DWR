@@ -170,6 +170,14 @@ function App(){
   const [watch,setWatch]=useState([]);
   useEffect(()=>{try{const s=localStorage.getItem("dwr_watchlist");if(s)setWatch(JSON.parse(s));}catch(e){}},[]);
   const toggleWatch=id=>setWatch(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];try{localStorage.setItem("dwr_watchlist",JSON.stringify(next));}catch(e){}return next;});
+  // NFL calendar mode (offseason vs in-season) from Sleeper state
+  const [nflState,setNflState]=useState(null);
+  useEffect(()=>{(async()=>{try{const s=await jget(`${SLEEP}/state/nfl`);setNflState(s);}catch(e){}})();},[]);
+  const mode=(()=>{const t=nflState&&nflState.season_type;if(!t)return null;
+    if(t==="regular")return {label:`in-season · wk ${nflState.week||"?"}`,live:true};
+    if(t==="post")return {label:"playoffs",live:true};
+    if(t==="pre")return {label:"preseason",live:false};
+    return {label:"offseason",live:false};})();
   const idx=useRef([]);
 
   useEffect(()=>{(async()=>{
@@ -244,7 +252,9 @@ function App(){
         <div className="h1">Dynasty <span style={{color:"var(--wr)"}}>Terminal</span></div>
         <div className="note" style={{marginTop:2}}>dynasty · live build · player · screener · trade · sim</div>
       </div>
-      <div className="mono small mut">{pStatus?<span className="err">{pStatus}</span>:<span className="ok">● sleeper live</span>}</div>
+      <div className="mono small mut" style={{display:"flex",gap:10,alignItems:"center"}}>
+        {mode&&<span className="chip" style={{color:mode.live?"var(--buy)":"var(--mut)",borderColor:mode.live?"var(--buy)":"var(--line2)",border:"1px solid"}} title={mode.live?"in-season: live game data flows":"offseason: trade market, values, rookie/pick analysis"}>{mode.label}</span>}
+        {pStatus?<span className="err">{pStatus}</span>:<span className="ok">● sleeper live</span>}</div>
     </div>
 
     {/* COMMAND BAR */}
@@ -268,7 +278,7 @@ function App(){
 
     {/* function tabs */}
     <div className="tabs">
-      {[["val","value"],["use","usage"],["mkt","market"],["comp","comps"],["news","wire"]].map(([k,d])=>(
+      {[["val","value"],["use","usage"],["mkt","market"],["stat","stats"],["comp","comps"],["news","wire"]].map(([k,d])=>(
         <span key={k} className={"tab"+(view==="player"&&fn===k?" on":"")} onClick={()=>{setFn(k);setView("player");}}><b>{k}</b> {d}</span>
       ))}
       <span className={"tab"+(view==="scr"?" on":"")} onClick={()=>setView("scr")}><b>scr</b> screener</span>
@@ -453,6 +463,45 @@ function NewsItem({a}){
       <div className="mono faint" style={{fontSize:10,marginTop:2}}>{dt} · espn</div>
       {a.desc&&<div className="small mut" style={{marginTop:3,lineHeight:1.5}}>{a.desc.slice(0,170)}{a.desc.length>170?"…":""}</div>}
     </a>);
+}
+// ESPN athlete stats — year-by-year, keyed by espn_id (which Sleeper provides), client-side.
+const _statCache={};
+function loadPlayerStats(espnId){
+  if(!espnId)return Promise.resolve(null);
+  if(_statCache[espnId])return _statCache[espnId];
+  _statCache[espnId]=(async()=>{try{
+    const d=await jget(`https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${espnId}/stats`);
+    return d&&d.categories?d.categories:null;
+  }catch(e){return null;}})();
+  return _statCache[espnId];
+}
+const CAT_BY_POS={QB:["passing","rushing"],RB:["rushing","receiving"],WR:["receiving","rushing"],TE:["receiving"]};
+function StatHistory({sel}){
+  const [cats,setCats]=useState(undefined);
+  useEffect(()=>{let dead=false;setCats(undefined);loadPlayerStats(sel.espn_id).then(c=>{if(!dead)setCats(c);});return ()=>{dead=true;};},[sel.espn_id]);
+  if(!sel.espn_id)return <div className="stub" style={{marginTop:12}}>no ESPN id for this player — stat history unavailable.</div>;
+  if(cats===undefined)return <div className="stub" style={{marginTop:12}}>loading stat history…</div>;
+  const want=CAT_BY_POS[sel.position]||["receiving"];
+  const show=want.map(n=>(cats||[]).find(c=>c.name===n)).filter(c=>c&&c.labels&&c.statistics&&c.statistics.length);
+  if(!show.length)return <div className="stub" style={{marginTop:12}}>no season stat history available for {sel.full_name}.</div>;
+  return (
+  <div style={{marginTop:12}}>
+    {show.map(cat=>{const cols=`52px repeat(${cat.labels.length},minmax(38px,1fr))`;return(
+      <div key={cat.name} className="panel" style={{marginTop:12,overflowX:"auto"}}>
+        <div style={{minWidth:480,padding:"12px 14px"}}>
+          <div className="lbl" style={{marginBottom:8}}>{cat.displayName||cat.name} · by season</div>
+          <div style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line2)"}}>
+            <span className="lbl">yr</span>{cat.labels.map((l,i)=><span key={i} className="lbl" style={{textAlign:"right"}}>{l}</span>)}
+          </div>
+          {cat.statistics.slice().reverse().map((s,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:cols,gap:6,padding:"5px 0",borderBottom:"1px solid var(--line)"}}>
+              <span className="mono small" style={{color:"var(--wr)"}}>{s.season?s.season.year:"—"}</span>
+              {(s.stats||[]).map((v,j)=><span key={j} className="mono small" style={{textAlign:"right"}}>{v}</span>)}
+            </div>))}
+        </div>
+      </div>);})}
+    <div className="note">season-by-season from ESPN, keyed by the player's ESPN id. in-season the current row updates as games are played.</div>
+  </div>);
 }
 function PlayerNews({sel}){
   const [news,setNews]=useState(null);
@@ -682,6 +731,7 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
       </div>
     )}
     {fn==="comp" && !(sigP&&sigP.comps&&sigP.comps.length>0) && <div className="stub" style={{marginTop:12}}><b>comps</b> — no profile for {sel.full_name} (needs a recent qualifying season)</div>}
+    {fn==="stat" && <StatHistory sel={sel}/>}
     {fn==="news" && <PlayerNews sel={sel}/>}
     {fn==="sim" && <div className="stub" style={{marginTop:12}}><b>season sim</b> — chunk 3 · monte-carlo over your synced schedule + rosters</div>}
   </div>);
