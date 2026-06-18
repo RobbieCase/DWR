@@ -607,7 +607,7 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
               style={{cursor:"pointer",fontSize:18,color:watch&&watch.includes(sel.player_id)?"var(--warn)":"var(--faint)"}}>{watch&&watch.includes(sel.player_id)?"★":"☆"}</span></div>
           <div className="mono small mut" style={{marginTop:4}}>
             <span style={{color:POS[sel.position]}}>{sel.position}</span> · <span onClick={()=>openDepth(sel.team)} style={{cursor:"pointer",color:"var(--wr)",textDecoration:"underline dotted",textUnderlineOffset:3}}>{sel.team}</span> · {age?age.toFixed(1)+"y":"age n/a"} · yoe {sel.years_exp??"—"}
-            <span onClick={()=>setShowStats(v=>!v)} style={{cursor:"pointer",color:showStats?"var(--wr)":"var(--mut)",textDecoration:"underline dotted",textUnderlineOffset:3}}> · stats {showStats?"▴":"▾"}</span>
+            <span onClick={()=>setShowStats(v=>!v)} style={{cursor:"pointer",color:showStats?"var(--wr)":"var(--mut)"}}> · stats {showStats?"▴":"▾"}</span>
             {sel.injury_status?<span className="err"> · {sel.injury_status}</span>:""}
           </div>
         </div>
