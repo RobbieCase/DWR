@@ -71,7 +71,7 @@ def main():
     comps = comps_for(feed_df)
 
     feed = {"meta": {"built_from": SEASONS, "backtest": rep, "trade_solve_selftest": sv,
-                     "age_curves": age_curves,
+                     "age_curves": age_curves, "aging_window": [AGING_SEASONS[0], AGING_SEASONS[-1]],
                      "note": "join to Sleeper via players[].espn_id == key"},
             "players": {}}
     by_pos = {}

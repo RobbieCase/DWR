@@ -440,10 +440,12 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
   // sample can't estimate survival past the early 30s (curve hits 0), so only show
   // conditional odds where the current-age baseline is reliable; flag the tail otherwise.
   const agec=sigMeta&&sigMeta.age_curves&&sigMeta.age_curves[sel.position];
+  const agewin=(sigMeta&&sigMeta.aging_window)||[2010,2025];
+  const agewinLabel=`${agewin[0]}–${String(agewin[1]).slice(2)}`;
   const survAt=a=>{if(!agec||!agec.surv)return null;const v=agec.surv[Math.max(21,Math.min(36,Math.round(a)))];return v==null?null:v;};
   const baseS=age!=null?survAt(age):null;
   const reliable=baseS!=null&&baseS>=0.1;
-  const condSurv=yrs=>{if(!reliable)return null;const s1=survAt(age+yrs);return s1==null?null:Math.max(0,Math.min(1,s1/baseS));};
+  const condSurv=yrs=>{if(!reliable)return null;const s1=survAt(age+yrs);return s1==null||s1<=0?null:Math.max(0,Math.min(1,s1/baseS));};
   const out3=condSurv(3), out5=condSurv(5);
 
   return (
@@ -524,8 +526,8 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
           <div className="metric"><div className="lbl">relevant in 5y</div><div className="v" style={{color:out5==null?"var(--faint)":out5>=.5?"var(--buy)":out5>=.25?"var(--warn)":"var(--sell)"}}>{out5!=null?Math.round(out5*100)+"%":"—"}</div></div>
         </div>
         <div className="note">{reliable
-          ?`Kaplan-Meier survival on ${agec.n} ${sel.position}s (2021–25): odds a ${Math.round(age)}-yo ${sel.position} is still fantasy-relevant N years out. context only — deliberately not folded into intrinsic.`
-          :`at ${Math.round(age)} this ${sel.position} is past the reliable range of the 5-season (2021–25) survival fit — long careers are under-observed, so no honest conditional odds. context only.`}</div>
+          ?`Kaplan-Meier survival on ${agec.n} ${sel.position}s (${agewinLabel}): odds a ${Math.round(age)}-yo ${sel.position} is still fantasy-relevant N years out. context only — deliberately not folded into intrinsic.`
+          :`at ${Math.round(age)} this ${sel.position} is past the reliable range of the ${agewinLabel} survival fit — even with full career history, relevant ${sel.position}s this old are rare, so no honest conditional odds. context only.`}</div>
       </div>
     )}
 
