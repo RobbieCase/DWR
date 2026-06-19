@@ -373,7 +373,7 @@ function App(){
       ? <WatchlistView {...{watch,players,fc,fcName,sig,set,pick,toggleWatch}}/>
       : view==="tut"
       ? <Tutorial {...{players,pStatus,fc,fcStatus,sig,nflState}}/>
-      : <PlayerView {...{sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,pick,watch,toggleWatch}}/>}
+      : <PlayerView {...{sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,pick,watch,toggleWatch,nflState}}/>}
 
     <IntegrationStatus compact {...{players,pStatus,fc,fcStatus,sig,nflState}}/>
     <div className="note" style={{marginTop:18,borderTop:"1px solid var(--line)",paddingTop:12}}>
@@ -415,7 +415,7 @@ function DepthChart({team,season,players,fc,fcName,pick,sel,onBack}){
     const out={}; if(!players)return out;
     Object.values(players).forEach(p=>{
       const n=norm(p.full_name), k=(p.position||"")+"|"+n;
-      const id=p.espn_id||(idMap&&((idMap.by_pos_name&&idMap.by_pos_name[k])||(idMap.by_name&&idMap.by_name[n])));
+      const id=p.espn_id||(idMap&&idMap.by_pos_name&&idMap.by_pos_name[k]);
       if(id)out[String(id)]=p;
     });
     return out;
@@ -676,7 +676,7 @@ async function resolveEspnId(p){
   if(p&&p.espn_id)return String(p.espn_id);
   const m=await loadEspnIdMap(); if(!m||!p)return null;
   const n=norm(p.full_name), k=(p.position||"")+"|"+n;
-  return (m.by_pos_name&&m.by_pos_name[k])||(m.by_name&&m.by_name[n])||null;
+  return (m.by_pos_name&&m.by_pos_name[k])||null;
 }
 function loadPlayerStats(espnId){
   if(!espnId)return Promise.resolve(null);
@@ -737,7 +737,8 @@ function GameLog({espnId,season}){
   </div>);
 }
 const CAT_BY_POS={QB:["passing","rushing"],RB:["rushing","receiving"],WR:["receiving","rushing"],TE:["receiving"]};
-function StatHistory({sel}){
+function statYear(row){return row&&row.season&&(row.season.year||parseInt(row.season.displayName));}
+function StatHistory({sel,currentSeason}){
   const [cats,setCats]=useState(undefined);
   const [resolvedId,setResolvedId]=useState(null);
   const [openYear,setOpenYear]=useState(null);
@@ -751,6 +752,9 @@ function StatHistory({sel}){
   const want=CAT_BY_POS[sel.position]||["receiving"];
   const show=want.map(n=>(cats||[]).find(c=>c.name===n)).filter(c=>c&&c.labels&&c.statistics&&c.statistics.length);
   if(!show.length)return <div className="stub" style={{marginTop:12}}>no season stat history available for {sel.full_name}.</div>;
+  const latest=Math.max(...show.flatMap(c=>(c.statistics||[]).map(statYear).filter(Boolean)));
+  const seasonNow=parseInt(currentSeason)||new Date().getFullYear();
+  if(latest&&seasonNow-latest>2)return <div className="stub" style={{marginTop:12}}>no recent ESPN stat history for {sel.full_name} — latest season found was {latest}.</div>;
   return (
   <div style={{marginTop:12}}>
     {show.map(cat=>{const cols=`52px repeat(${cat.labels.length},minmax(38px,1fr))`;return(
@@ -836,7 +840,7 @@ function WatchlistView({watch,players,fc,fcName,sig,set,pick,toggleWatch}){
     <div className="note">edge &amp; gap from the live signal; "since tracked" is the change in stored daily value (12-tm {set.sf?"SF":"1QB"} PPR) across the snapshots accumulated so far. tap ★ to remove, or a name to open it.</div>
   </div>);
 }
-function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,pick,watch,toggleWatch}){
+function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,pick,watch,toggleWatch,nflState}){
   const [showStats,setShowStats]=useState(false);
   const sigP=sigFor(sig,sel);
   const sigMeta=sig&&sig.meta;
@@ -887,7 +891,7 @@ function PlayerView({sel,fn,fc,fcName,fcStatus,set,setSet,openDepth,sig,players,
       </div>
     </div>
 
-    {showStats && <StatHistory sel={sel}/>}
+    {showStats && <StatHistory sel={sel} currentSeason={nflState&&nflState.season}/>}
 
     {/* value metrics */}
     {(fn==="val"||fn==="mkt") && (
