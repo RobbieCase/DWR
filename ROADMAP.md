@@ -38,12 +38,12 @@ Goal: turn the existing trade solver into an inspectable value surface.
 - Live-verify revealed-preference solves on real Sleeper leagues.
 - Persist solved league values by league/season and show coverage/confidence counts.
 - Expose revealed-vs-market deltas on player pages, screener rows, and trade verdicts.
-- Improve trade verdict consolidation tax using actual roster/bench/taxi settings.
+- Remove the flat consolidation tax unless/until roster pressure can be modeled from actual drop/replacement context.
 
 Done when:
 - Revealed values are inspectable, labeled, and clearly separated from market values.
 - Coverage explains number of trades, solved players, and market-anchored players.
-- Trade verdicts reflect league-specific roster pressure, not a flat body count.
+- Trade verdicts do not apply an unsound roster-pressure adjustment.
 
 #### Sprint 5 — Historical value and moat clock
 Goal: deepen value history without confusing sources.
@@ -139,7 +139,7 @@ The header **mode badge** ships (offseason / in-season · wk N, from Sleeper `/s
 Can't be validated until the season; build the scaffolding, prove it in the fall.
 
 ### D. Trade verdict — deeper
-Revealed-values basis + contention-window tilt ship. Next: scale the consolidation tax by the league's actual roster/bench/taxi settings (vs the current flat 4%/body), and ultimately let the revealed-preference solver *learn* the discount.
+Revealed-values basis + contention-window tilt ship. Sprint 4 removes the flat consolidation tax rather than replacing it with another heuristic. Roster-pressure pricing should return only when it can inspect actual drop/replacement context or be learned from revealed trades.
 
 ### E. Depth charts — quality follow-up
 ESPN is now the primary source for team depth charts, with Sleeper as fallback. Sprint 3 shipped the all-team mapping smoke test, WR rank/slot display, and partial/unmapped labels. Next depth-chart work should focus on richer role semantics only if ESPN's structure proves stable during the season.
@@ -179,3 +179,4 @@ ESPN is now the primary source for team depth charts, with Sleeper as fallback. 
 - **ESPN depth charts** — depth view now uses ESPN team depth charts as primary source, matched back to Sleeper by ESPN id / `data/espn_ids.json`; Sleeper depth is fallback only.
 - **Mode badge** — offseason/in-season indicator from Sleeper state.
 - **Depth + identity coverage** — ESPN depth mappings are validated across all 32 teams in the network smoke test; depth charts now label fallback/partial/unmapped athletes and preserve WR rank/slot hints; the spine emits `data/identity_coverage.json` so join coverage gaps are visible by source, season, position, and join method.
+- **Revealed values persistence + deltas** — solved league values persist locally by league/season, show trade/solved/market-anchored coverage, surface revealed-vs-market deltas on player pages and the screener, and feed the trade verdict's revealed basis. The old flat consolidation tax is removed until roster pressure can be modeled honestly.

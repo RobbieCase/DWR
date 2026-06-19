@@ -52,6 +52,9 @@ async function checkIndex() {
   assertCheck("signal join avoids plain-name fallback", !/idx\.byName\[n\]/.test(source), "position/name candidates only");
   assertCheck("ESPN id join avoids plain-name fallback", !/by_name&&m\.by_name\[n\]|idMap\.by_name/.test(source), "position/name ESPN id map only");
   assertCheck("stale stat history hidden", source.includes("seasonNow-latest>2"), "old ESPN stat rows do not look current");
+  assertCheck("revealed values persist", source.includes("saveRevealedLocal") && source.includes("dwr_revealed_"), "league solves are localStorage-backed");
+  assertCheck("revealed deltas exposed", source.includes("revDelta") && source.includes("revealed value ·"), "player and screener reveal deltas");
+  assertCheck("consolidation tax removed", !source.includes("roster-spot tax") && source.includes("No consolidation tax is applied"), "verdict avoids unsound roster tax");
 
   const babelUrl = "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js";
   const res = await fetch(babelUrl);
