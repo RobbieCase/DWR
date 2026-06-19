@@ -15,6 +15,8 @@ DWR is a browser-based dynasty fantasy football terminal: one deployable `index.
 
 The important distinction: DWR should not become a prettier API mirror. The long-term edge is the loop between live league data, self-collected value history, backtested usage signals, revealed-preference trade values, and actionable roster/trade surfaces.
 
+For the next-level data/model plan, see `ADVANCED_DATA_MODEL_STRATEGY.md`.
+
 ### What exists now
 
 Frontend:
